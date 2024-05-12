@@ -3,49 +3,63 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-#define PROMPT "#cisfun$ "
+#define BUFFER_SIZE 1024
 
 int main(void)
 {
-    char *input;
-    size_t bufsize = 32;
-    input = (char *)malloc(bufsize * sizeof(char));
-    if (input == NULL)
+    char *buffer;
+    ssize_t chars_read;
+    size_t buffer_size = BUFFER_SIZE;
+
+    buffer = malloc(buffer_size * sizeof(char));
+    if (buffer == NULL)
     {
-        perror("Unable to allocate buffer");
-        exit(1);
+        perror("malloc");
+        exit(EXIT_FAILURE);
     }
 
     while (1)
     {
-        printf("%s", PROMPT);
-        if (getline(&input, &bufsize, stdin) == -1)
+        printf("#cisfun$ ");
+        chars_read = getline(&buffer, &buffer_size, stdin);
+        if (chars_read == -1)
         {
             printf("\n");
             break;
         }
 
-        input[0] = input[0]; /* Do nothing to avoid warning for unused variable */
+        buffer[chars_read - 1] = '\0'; /* Removing newline character */
 
-        pid_t pid = fork();
-        if (pid == -1)
+        if (access(buffer, X_OK) == 0)
         {
-            perror("fork");
-            exit(EXIT_FAILURE);
-        }
-        if (pid == 0)
-        {
-            if (execve(input, NULL, NULL) == -1)
+            pid_t child_pid = fork();
+            if (child_pid == -1)
             {
-                perror("execve");
+                perror("fork");
+                exit(EXIT_FAILURE);
             }
-            exit(EXIT_FAILURE);
+            if (child_pid == 0)
+            {
+                char *args[2];
+                args[0] = buffer;
+                args[1] = NULL;
+                if (execve(buffer, args, NULL) == -1)
+                {
+                    perror(buffer);
+                    exit(EXIT_FAILURE);
+                }
+            }
+            else
+            {
+                wait(NULL);
+            }
         }
         else
         {
-            wait(NULL);
+            fprintf(stderr, "%s: No such file or directory\n", buffer);
         }
     }
-    free(input);
-    return (0);
+
+    free(buffer);
+    return (EXIT_SUCCESS);
 }
