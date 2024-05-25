@@ -1,65 +1,97 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/wait.h>
+#include "shell.h"
 
-#define BUFFER_SIZE 1024
-
-int main(void)
+void shell_loop(void)
 {
-    char *buffer;
-    ssize_t chars_read;
-    size_t buffer_size = BUFFER_SIZE;
+    char *line;
+    char **args;
+    int status;
 
-    buffer = malloc(buffer_size * sizeof(char));
-    if (buffer == NULL)
-    {
-        perror("malloc");
+    do {
+        printf("#cisfun$ ");
+        line = read_line();
+        args = split_line(line);
+        status = execute(args);
+
+        free(line);
+        free(args);
+    } while (status);
+}
+
+char *read_line(void)
+{
+    char *line = NULL;
+    size_t bufsize = 0;
+
+    if (getline(&line, &bufsize, stdin) == -1) {
+        if (feof(stdin)) {
+            exit(EXIT_SUCCESS);
+        } else {
+            perror("read_line");
+            exit(EXIT_FAILURE);
+        }
+    }
+    return line;
+}
+
+#define TOK_BUFSIZE 64
+#define TOK_DELIM " \t\r\n\a"
+
+char **split_line(char *line)
+{
+    int bufsize = TOK_BUFSIZE, position = 0;
+    char **tokens = malloc(bufsize * sizeof(char*));
+    char *token;
+
+    if (!tokens) {
+        fprintf(stderr, "allocation error\n");
         exit(EXIT_FAILURE);
     }
 
-    while (1)
-    {
-        printf("#cisfun$ ");
-        chars_read = getline(&buffer, &buffer_size, stdin);
-        if (chars_read == -1)
-        {
-            printf("\n");
-            break;
-        }
+    token = strtok(line, TOK_DELIM);
+    while (token != NULL) {
+        tokens[position++] = token;
 
-        buffer[chars_read - 1] = '\0'; /* Removing newline character */
-
-        if (access(buffer, X_OK) == 0)
-        {
-            pid_t child_pid = fork();
-            if (child_pid == -1)
-            {
-                perror("fork");
+        if (position >= bufsize) {
+            bufsize += TOK_BUFSIZE;
+            tokens = realloc(tokens, bufsize * sizeof(char*));
+            if (!tokens) {
+                fprintf(stderr, "allocation error\n");
                 exit(EXIT_FAILURE);
             }
-            if (child_pid == 0)
-            {
-                char *args[2];
-                args[0] = buffer;
-                args[1] = NULL;
-                if (execve(buffer, args, NULL) == -1)
-                {
-                    perror(buffer);
-                    exit(EXIT_FAILURE);
-                }
-            }
-            else
-            {
-                wait(NULL);
-            }
         }
-        else
-        {
-            fprintf(stderr, "%s: No such file or directory\n", buffer);
-        }
+
+        token = strtok(NULL, TOK_DELIM);
+    }
+    tokens[position] = NULL;
+    return tokens;
+}
+
+int execute(char **args)
+{
+    pid_t pid;
+    int status;
+
+    if (args[0] == NULL) {
+        /* An empty command was entered. */
+        return 1;
     }
 
-    free(buffer);
-    return (EXIT_SUCCESS);
+    pid = fork();
+    if (pid == 0) {
+        /* Child process */
+        if (execve(args[0], args, NULL) == -1) {
+            perror("./shell");
+        }
+        exit(EXIT_FAILURE);
+    } else if (pid < 0) {
+        /* Error forking */
+        perror("fork");
+    } else {
+        /* Parent process */
+        do {
+            waitpid(pid, &status, WUNTRACED);
+        } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+    }
+
+    return 1;
 }
