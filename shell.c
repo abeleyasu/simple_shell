@@ -1,97 +1,110 @@
 #include "shell.h"
 
-void shell_loop(void)
-{
-    char *line;
-    char **args;
-    int status;
-
-    do {
-        printf("#cisfun$ ");
-        line = read_line();
-        args = split_line(line);
-        status = execute(args);
-
-        free(line);
-        free(args);
-    } while (status);
-}
-
-char *read_line(void)
+/**
+ * prompt - Displays the shell prompt and waits for user input.
+ */
+void prompt(void)
 {
     char *line = NULL;
-    size_t bufsize = 0;
-
-    if (getline(&line, &bufsize, stdin) == -1) {
-        if (feof(stdin)) {
-            exit(EXIT_SUCCESS);
-        } else {
-            perror("read_line");
+    size_t len = 0;
+    char **args;
+    
+    printf("$ ");
+    if (getline(&line, &len, stdin) == -1)
+    {
+        if (feof(stdin))
+        {
+            exit(EXIT_SUCCESS);  /* Exit on EOF */
+        }
+        else
+        {
+            perror("getline");
             exit(EXIT_FAILURE);
         }
     }
-    return line;
+
+    args = parse_input(line);
+    execute(args);
+
+    free(line);
+    free(args);
 }
 
-#define TOK_BUFSIZE 64
-#define TOK_DELIM " \t\r\n\a"
-
-char **split_line(char *line)
+/**
+ * parse_input - Parses the user input into an array of arguments.
+ * @line: The input line from the user.
+ *
+ * Return: An array of arguments.
+ */
+char **parse_input(char *line)
 {
-    int bufsize = TOK_BUFSIZE, position = 0;
+    int bufsize = 64, i = 0;
     char **tokens = malloc(bufsize * sizeof(char*));
     char *token;
 
-    if (!tokens) {
+    if (!tokens)
+    {
         fprintf(stderr, "allocation error\n");
         exit(EXIT_FAILURE);
     }
 
-    token = strtok(line, TOK_DELIM);
-    while (token != NULL) {
-        tokens[position++] = token;
+    token = strtok(line, " \t\r\n\a");
+    while (token != NULL)
+    {
+        tokens[i] = token;
+        i++;
 
-        if (position >= bufsize) {
-            bufsize += TOK_BUFSIZE;
+        if (i >= bufsize)
+        {
+            bufsize += 64;
             tokens = realloc(tokens, bufsize * sizeof(char*));
-            if (!tokens) {
+            if (!tokens)
+            {
                 fprintf(stderr, "allocation error\n");
                 exit(EXIT_FAILURE);
             }
         }
 
-        token = strtok(NULL, TOK_DELIM);
+        token = strtok(NULL, " \t\r\n\a");
     }
-    tokens[position] = NULL;
+    tokens[i] = NULL;
     return tokens;
 }
 
-int execute(char **args)
+/**
+ * execute - Executes the given command.
+ * @args: An array of arguments.
+ */
+void execute(char **args)
 {
     pid_t pid;
     int status;
 
-    if (args[0] == NULL) {
-        /* An empty command was entered. */
-        return 1;
+    if (args[0] == NULL)
+    {
+        return;  /* No command entered */
     }
 
     pid = fork();
-    if (pid == 0) {
+    if (pid == 0)
+    {
         /* Child process */
-        if (execve(args[0], args, NULL) == -1) {
-            perror("./shell");
+        if (execvp(args[0], args) == -1)
+        {
+            perror("execvp");
         }
         exit(EXIT_FAILURE);
-    } else if (pid < 0) {
+    }
+    else if (pid < 0)
+    {
         /* Error forking */
         perror("fork");
-    } else {
+    }
+    else
+    {
         /* Parent process */
         do {
             waitpid(pid, &status, WUNTRACED);
         } while (!WIFEXITED(status) && !WIFSIGNALED(status));
     }
-
-    return 1;
 }

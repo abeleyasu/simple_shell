@@ -1,12 +1,22 @@
-#include <stdio.h>
+#include "shell.h"
 
 /**
- * main - Entry point of the program
+ * main - Entry point of the shell program.
+ * @argc: Argument count.
+ * @argv: Argument vector.
  *
- * Return: Always 0 (Success)
+ * Return: 0 on success, or an error code on failure.
  */
-int main(void)
+int main(int argc, char **argv)
 {
-printf("Hello, World!\n");
-return (0);
+    (void)argc;
+    (void)argv;
+
+    /* Main shell loop */
+    while (1)
+    {
+        prompt();
+    }
+
+    return (0);
 }
